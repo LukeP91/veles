@@ -1,6 +1,7 @@
 package main
 
 import (
+    "bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -8,50 +9,88 @@ import (
 )
 
 type StubInvestmentsStore struct {
-	investments map[int]int
+	investments map[string]int
+	saveCalls   []string
 }
 
-func (s *StubInvestmentsStore) GetInvestmentAmount(id int) int {
+func (s *StubInvestmentsStore) GetInvestmentAmount(id string) int {
 	amount := s.investments[id]
 	return amount
 }
 
-func TestGETPlayers(t *testing.T) {
+func (s *StubInvestmentsStore) SaveInvestment(name string, amount int) {
+	s.investments[name] = amount
+	s.saveCalls = append(s.saveCalls, name)
+}
+
+func TestGETInvestments(t *testing.T) {
 	store := StubInvestmentsStore{
-		map[int]int{
-			1: 20,
-			2: 30,
+		map[string]int{
+			"a": 20,
+			"b": 30,
 		},
+		nil,
 	}
 	server := &InvestmentServer{&store}
 
 	t.Run("returns Investment 1 amount", func(t *testing.T) {
-		request := newGetInvestmentAmountRequest("1")
+		request := newGetInvestmentAmountRequest("a")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
-        assertStatus(t, response.Code, http.StatusOK)
+		assertStatus(t, response.Code, http.StatusOK)
 		assertResponseBody(t, response.Body.String(), "20")
 	})
 
 	t.Run("returns Investment 2 amount", func(t *testing.T) {
-		request := newGetInvestmentAmountRequest("2")
+		request := newGetInvestmentAmountRequest("b")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
-        assertStatus(t, response.Code, http.StatusOK)
+		assertStatus(t, response.Code, http.StatusOK)
 		assertResponseBody(t, response.Body.String(), "30")
 	})
 
 	t.Run("returns 404 on missing investments", func(t *testing.T) {
-		request := newGetInvestmentAmountRequest("3")
+		request := newGetInvestmentAmountRequest("c")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
-        assertStatus(t, response.Code, http.StatusNotFound)
+		assertStatus(t, response.Code, http.StatusNotFound)
+	})
+}
+
+func TestStoreInvestment(t *testing.T) {
+	store := StubInvestmentsStore{
+		map[string]int{},
+		nil,
+	}
+	server := &InvestmentServer{&store}
+
+	t.Run("it saves investment when POST", func(t *testing.T) {
+		id := "a42141"
+		amount := 30
+		request := newPostSaveRequest(id, amount)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusAccepted)
+
+		if len(store.saveCalls) != 1 {
+			t.Errorf("got %d calls to SaveInvestment want %d", len(store.saveCalls), 1)
+		}
+
+		if store.saveCalls[0] != id {
+			t.Errorf("did not store correct investment id got %q want %q", store.saveCalls[0], id)
+		}
+
+		if store.investments[id] != amount {
+			t.Errorf("did not store correct investment amount got %q want %q", store.investments[id], amount)
+		}
 	})
 }
 
@@ -64,6 +103,11 @@ func assertStatus(t testing.TB, got, want int) {
 
 func newGetInvestmentAmountRequest(id string) *http.Request {
 	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/investments/%s", id), nil)
+	return req
+}
+
+func newPostSaveRequest(name string, amount int) *http.Request {
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("/investments/%s", name), bytes.NewBuffer(amount))
 	return req
 }
 

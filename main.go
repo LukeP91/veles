@@ -7,9 +7,11 @@ import (
 
 type InMemoryInvestmentStore struct{}
 
-func (i *InMemoryInvestmentStore) GetInvestmentAmount(id int) int {
+func (i *InMemoryInvestmentStore) GetInvestmentAmount(id string) int {
 	return 123
 }
+
+func (i *InMemoryInvestmentStore) SaveInvestment(id string, amount int) {}
 
 func main() {
 	server := &InvestmentServer{&InMemoryInvestmentStore{}}
